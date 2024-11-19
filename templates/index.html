@@ -3,59 +3,119 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hexagon Tile Game</title>
-    <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-        }
-        #board {
-            display: grid;
-            grid-template-columns: repeat(10, 60px);
-            grid-template-rows: repeat(10, 52px);
-            gap: 2px;
-        }
-        .hex {
-            width: 60px;
-            height: 52px;
-            background-color: lightgray;
-            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-            transition: background-color 0.2s;
-        }
-    </style>
+    <title>Connect 4</title>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+    <!-- Title and Status -->
+    <header>
+        <h1>Connect 4</h1>
+        <h2 id="status">Current Player: {{ current_player }}</h2>
+    </header>
 
-<div id="board">
-    <!-- Hexagonal tiles will be added here on clicks -->
-</div>
+    <!-- Game Board -->
+    <div id="board">
+        <!-- Generate rows and cells dynamically based on the board -->
+        {% for row in board %}
+        <div class="row">
+            {% for cell in row %}
+            <div 
+                class="cell {{ 'blocked' if (loop.parent.loop.index0, loop.index0) in blocked else '' }}" 
+                data-col="{{ loop.index0 }}">
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script>
-    $(document).ready(function() {
-        // Create an empty board of hex tiles
-        for (let i = 0; i < 100; i++) {
-            const hexTile = $('<div class="hex"></div>');
-            hexTile.data("clicked", false);  // Track if a tile has been clicked
-            $('#board').append(hexTile);
-        }
+    <!-- Reset Button -->
+    <button id="reset-button">Reset Game</button>
 
-        // Add color to hex tiles on click
-        $('#board').on('click', '.hex', function() {
-            if (!$(this).data("clicked")) {  // Only allow one click per tile
-                $.getJSON('/add_tile', function(data) {
-                    $(this).css('background-color', data.color);
-                    $(this).data("clicked", true);  // Mark as clicked
-                }.bind(this));
-            }
+    <!-- JavaScript -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        // Initial State
+        let currentPlayer = "{{ current_player }}";
+        let board = {{ board | safe }};
+        let blocked = {{ blocked | safe }};
+
+        // Function to handle clicks on the game board
+        $(document).on('click', '.cell', function () {
+            const col = $(this).data('col'); // Get the column index
+
+            // Send the move to the server
+            $.ajax({
+                url: '/move',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ column: col }),
+                success: function (response) {
+                    // Handle errors
+                    if (response.error) {
+                        alert(response.error);
+                        return;
+                    }
+
+                    // Update game state
+                    board = response.board;
+                    currentPlayer = response.current_player;
+
+                    // Update game status
+                    const statusText = response.winner 
+                        ? (response.winner === 'Draw' ? 'Game is a Draw!' : `Winner: ${response.winner}`) 
+                        : `Current Player: ${currentPlayer}`;
+                    $('#status').text(statusText);
+
+                    // Redraw the board
+                    updateBoard();
+                }
+            });
         });
-    });
-</script>
 
+        // Function to handle resetting the game
+        $('#reset-button').click(function () {
+            $.post('/reset', function (response) {
+                // Reset game state
+                board = response.board;
+                blocked = response.blocked;
+                currentPlayer = response.current_player;
+
+                // Update game status
+                $('#status').text(`Current Player: ${currentPlayer}`);
+
+                // Redraw the board
+                updateBoard();
+            });
+        });
+
+        // Function to dynamically redraw the game board
+        function updateBoard() {
+            const boardElement = $('#board');
+            boardElement.empty(); // Clear existing board
+
+            // Recreate rows and cells based on the updated state
+            board.forEach((row, rowIndex) => {
+                const rowDiv = $('<div class="row"></div>');
+
+                row.forEach((cell, colIndex) => {
+                    const cellDiv = $('<div class="cell"></div>').data('col', colIndex);
+
+                    // Add chip color if the cell is occupied
+                    if (cell) {
+                        cellDiv.addClass(cell.toLowerCase());
+                    }
+
+                    // Mark blocked cells
+                    if (blocked.some(pos => pos[0] === rowIndex && pos[1] === colIndex)) {
+                        cellDiv.addClass('blocked');
+                    }
+
+                    rowDiv.append(cellDiv);
+                });
+
+                boardElement.append(rowDiv);
+            });
+        }
+    </script>
 </body>
 </html>
