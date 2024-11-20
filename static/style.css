@@ -6,8 +6,8 @@ body {
 
 .board {
     display: grid;
-    grid-template-rows: repeat(7, 50px);
-    grid-template-columns: repeat(8, 50px);
+    grid-template-rows: repeat(8, 50px);  /* 8 rows */
+    grid-template-columns: repeat(7, 50px);  /* 7 columns */
     gap: 2px;
     justify-content: center;
     margin: 20px auto;

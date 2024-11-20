@@ -5,8 +5,8 @@ app = Flask(__name__)
 
 # Initialize game variables
 def initialize_game():
-    board = [[None for _ in range(8)] for _ in range(7)]  # 7x8 board
-    blocked_spaces = random.sample([(r, c) for r in range(7) for c in range(8)], 5)
+    board = [[None for _ in range(7)] for _ in range(8)]  # 8 rows × 7 columns
+    blocked_spaces = random.sample([(r, c) for r in range(8) for c in range(7)], 5)
     for r, c in blocked_spaces:
         board[r][c] = "Blocked"
     return board, blocked_spaces, "Player 1"
@@ -16,12 +16,17 @@ board, blocked_spaces, current_player = initialize_game()
 # Helper to check win conditions
 def check_winner(board):
     directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
-    for r in range(7):
-        for c in range(8):
+    for r in range(8):
+        for c in range(7):
             if board[r][c] in ["Player 1", "Player 2"]:
                 for dr, dc in directions:
                     try:
-                        if all(board[r + i * dr][c + i * dc] == board[r][c] for i in range(4)):
+                        if all(
+                            0 <= r + i * dr < 8 and
+                            0 <= c + i * dc < 7 and
+                            board[r + i * dr][c + i * dc] == board[r][c]
+                            for i in range(4)
+                        ):
                             return board[r][c]
                     except IndexError:
                         continue
@@ -36,7 +41,7 @@ def play(column):
     global board, current_player
 
     # Find the lowest available row in the chosen column
-    for row in range(6, -1, -1):
+    for row in range(7, -1, -1):  # Iterate bottom-up
         if board[row][column] is None:
             board[row][column] = current_player
             winner = check_winner(board)
