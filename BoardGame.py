@@ -1,110 +1,56 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 import random
 
 app = Flask(__name__)
 
-# Constants
-ROWS = 7
-COLS = 8
-BLOCKED_COUNT = 5
+# Initialize game variables
+def initialize_game():
+    board = [[None for _ in range(8)] for _ in range(7)]  # 7x8 board
+    blocked_spaces = random.sample([(r, c) for r in range(7) for c in range(8)], 5)
+    for r, c in blocked_spaces:
+        board[r][c] = "Blocked"
+    return board, blocked_spaces, "Player 1"
 
+board, blocked_spaces, current_player = initialize_game()
 
-class Connect4Game:
-    def __init__(self):
-        self.reset_game()
+# Helper to check win conditions
+def check_winner(board):
+    directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+    for r in range(7):
+        for c in range(8):
+            if board[r][c] in ["Player 1", "Player 2"]:
+                for dr, dc in directions:
+                    try:
+                        if all(board[r + i * dr][c + i * dc] == board[r][c] for i in range(4)):
+                            return board[r][c]
+                    except IndexError:
+                        continue
+    return None
 
-    def reset_game(self):
-        """Initialize the game state."""
-        self.board = [['' for _ in range(COLS)] for _ in range(ROWS)]
-        self.blocked_positions = self._generate_blocked_positions()
-        self.current_player = 'Player 1'
-        self.winner = None
-
-    def _generate_blocked_positions(self):
-        """Randomly choose blocked positions."""
-        blocked = random.sample(range(ROWS * COLS), BLOCKED_COUNT)
-        return {(pos // COLS, pos % COLS) for pos in blocked}
-
-    def place_chip(self, column):
-        """Place a chip in the selected column."""
-        if self.winner:
-            return {'error': 'Game over. Please restart to play again.'}
-
-        chip = 'Blue' if self.current_player == 'Player 1' else 'Black'
-
-        # Place the chip in the lowest available row in the column
-        for row in range(ROWS - 1, -1, -1):
-            if (row, column) not in self.blocked_positions and self.board[row][column] == '':
-                self.board[row][column] = chip
-                if self.check_winner(row, column, chip):
-                    self.winner = self.current_player
-                elif self.is_draw():
-                    self.winner = 'Draw'
-                else:
-                    self.current_player = 'Player 2' if self.current_player == 'Player 1' else 'Player 1'
-                return {'board': self.board, 'current_player': self.current_player, 'winner': self.winner}
-
-        return {'error': 'Column is full'}
-
-    def is_draw(self):
-        """Check if the board is full."""
-        return all(
-            self.board[row][col] != '' or (row, col) in self.blocked_positions
-            for row in range(ROWS)
-            for col in range(COLS)
-        )
-
-    def check_winner(self, row, col, chip):
-        """Check if the current move results in a win."""
-        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]  # Right, Down, Diagonal Down-Right, Diagonal Down-Left
-
-        for dr, dc in directions:
-            count = 1  # Count the current chip
-            for step in [1, -1]:  # Check both directions
-                r, c = row + step * dr, col + step * dc
-                while 0 <= r < ROWS and 0 <= c < COLS and self.board[r][c] == chip:
-                    count += 1
-                    r += step * dr
-                    c += step * dc
-            if count >= 4:
-                return True
-        return False
-
-
-# Initialize a single game instance
-game = Connect4Game()
-
-
-@app.route('/')
+@app.route("/")
 def index():
-    """Render the game board."""
-    return render_template(
-        'index.html',
-        board=game.board,
-        blocked=list(game.blocked_positions),
-        current_player=game.current_player
-    )
+    return render_template("index.html", board=board, current_player=current_player, blocked_spaces=blocked_spaces)
 
+@app.route("/play/<int:column>", methods=["POST"])
+def play(column):
+    global board, current_player
 
-@app.route('/move', methods=['POST'])
-def move():
-    """Handle a player's move."""
-    data = request.json
-    column = data.get('column')
+    # Find the lowest available row in the chosen column
+    for row in range(6, -1, -1):
+        if board[row][column] is None:
+            board[row][column] = current_player
+            winner = check_winner(board)
+            if winner:
+                return jsonify({"winner": winner})
+            current_player = "Player 2" if current_player == "Player 1" else "Player 1"
+            return jsonify({"board": board, "current_player": current_player})
+    return jsonify({"error": "Column is full"}), 400
 
-    if column is None or not (0 <= column < COLS):
-        return jsonify({'error': 'Invalid column'}), 400
-
-    result = game.place_chip(column)
-    return jsonify(result)
-
-
-@app.route('/reset', methods=['POST'])
+@app.route("/reset", methods=["POST"])
 def reset():
-    """Reset the game."""
-    game.reset_game()
-    return jsonify({'board': game.board, 'current_player': game.current_player, 'blocked': list(game.blocked_positions)})
+    global board, blocked_spaces, current_player
+    board, blocked_spaces, current_player = initialize_game()
+    return redirect(url_for("index"))
 
-
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+if __name__ == "__main__":
+    app.run(debug=True)
